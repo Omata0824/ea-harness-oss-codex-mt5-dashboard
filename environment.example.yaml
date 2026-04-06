@@ -1,0 +1,24 @@
+mt5:
+  terminal_path: "C:/Program Files/Your MT5/terminal64.exe"
+  metaeditor_path: "C:/Program Files/Your MT5/metaeditor64.exe"
+  data_folder: "C:/Users/your-user/AppData/Roaming/MetaQuotes/Terminal/your-terminal-id"
+  experts_subfolder: "MQL5/Experts/EAHarness"
+  tester_subfolder: "MQL5/Profiles/Tester"
+
+codex:
+  command: "codex"
+  approval_mode: "full-auto"
+  max_retry: 3
+  timeout_seconds: 300
+
+pipeline:
+  mode: "confirm"
+  confirm_points:
+    - "spec_approved"
+    - "optimization_complete"
+    - "analysis_complete"
+  compile_max_retry: 5
+
+server:
+  port: 3000
+  host: "localhost"

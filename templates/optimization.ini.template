@@ -1,0 +1,16 @@
+[Tester]
+Expert={{EXPERT_PATH}}
+Symbol={{SYMBOL}}
+Period={{TIMEFRAME}}
+Model={{MODEL}}
+Optimization=2
+FromDate={{FROM_DATE}}
+ToDate={{TO_DATE}}
+Deposit=10000
+Currency=USD
+Leverage=100
+ExecutionMode=0
+Report={{REPORT_PATH}}
+ReplaceReport=1
+ShutdownTerminal=1
+{{TESTER_INPUTS}}

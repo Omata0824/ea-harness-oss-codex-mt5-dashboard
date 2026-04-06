@@ -1,0 +1,12 @@
+node_modules/
+dist/
+workspace/
+
+environment.yaml
+
+server.out.log
+server.err.log
+*.log
+
+.DS_Store
+Thumbs.db

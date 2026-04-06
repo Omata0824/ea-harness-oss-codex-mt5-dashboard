@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EA Harness OSS</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">EA Research Control</p>
+          <h1>EA Harness OSS</h1>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>新規プロジェクト</h2>
+          </div>
+          <form id="new-project-form" class="stack">
+            <input id="project-name" name="name" placeholder="プロジェクト名" />
+            <textarea
+              id="project-idea"
+              name="idea"
+              rows="4"
+              placeholder="例: RSI逆張り USDJPY H1"
+              required
+            ></textarea>
+            <button type="submit">作成する</button>
+          </form>
+        </section>
+
+        <section class="panel grow">
+          <div class="panel-head">
+            <h2>プロジェクト一覧</h2>
+            <button id="refresh-projects" class="secondary" type="button">更新</button>
+          </div>
+          <div id="project-list" class="project-list"></div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="status-row">
+            <div class="status-pill"><span>MT5</span><strong id="mt5-status">未確認</strong></div>
+            <div class="status-pill"><span>Codex</span><strong id="codex-status">未確認</strong></div>
+            <div class="status-pill">
+              <span>モード</span>
+              <strong id="mode-label">確認</strong>
+            </div>
+          </div>
+          <div class="mode-switch">
+            <button id="mode-confirm" class="secondary" type="button">確認モード</button>
+            <button id="mode-auto" class="secondary" type="button">自動モード</button>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div>
+            <p class="eyebrow">Browser Command Center</p>
+            <h2 id="project-title">プロジェクトを選択してください</h2>
+          </div>
+          <div class="hero-actions">
+            <button id="start-project" type="button">開始</button>
+            <button id="approve-project" class="secondary" type="button">承認</button>
+            <button id="retry-project" class="secondary" type="button">再実行</button>
+            <button id="improve-project" class="secondary" type="button">改善サイクル</button>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="tabs">
+            <div class="tab-header">
+              <button class="tab is-active" data-tab="pipeline" type="button">パイプライン</button>
+              <button class="tab" data-tab="chat" type="button">チャット</button>
+              <button class="tab" data-tab="analysis" type="button">分析</button>
+            </div>
+
+            <div class="tab-body">
+              <section class="tab-panel is-active" data-panel="pipeline">
+                <div id="pipeline-monitor"></div>
+                <div class="log-panel">
+                  <div class="panel-head">
+                    <h2>ログ</h2>
+                  </div>
+                  <pre id="event-log"></pre>
+                </div>
+              </section>
+
+              <section class="tab-panel" data-panel="chat">
+                <div id="chat-messages" class="chat-messages"></div>
+                <form id="chat-form" class="chat-form">
+                  <textarea id="chat-input" rows="3" placeholder="質問や修正依頼を入力"></textarea>
+                  <button type="submit">送信</button>
+                </form>
+              </section>
+
+              <section class="tab-panel" data-panel="analysis">
+                <div id="analysis-viewer"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel setup-panel">
+          <div class="panel-head panel-head-stack">
+            <div>
+              <p class="eyebrow">初回設定</p>
+              <h2>Setup Wizard</h2>
+            </div>
+            <div class="inline-actions setup-actions">
+              <button id="test-mt5" class="secondary" type="button">MT5 接続テスト</button>
+              <button id="test-codex" class="secondary" type="button">Codex 接続テスト</button>
+              <button id="save-settings" type="button">設定を保存</button>
+            </div>
+          </div>
+          <div id="setup-wizard"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>
