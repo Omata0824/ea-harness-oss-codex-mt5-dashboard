@@ -14,13 +14,41 @@ function approvalPointForPhase(phase: number): ApprovalPoint | undefined {
   switch (phase) {
     case 0:
       return "spec_approved";
-    case 3:
-      return "optimization_complete";
     case 4:
       return "analysis_complete";
     default:
       return undefined;
   }
+}
+
+function wantsPhase3Rerun(message = ""): boolean {
+  const normalized = message.toLowerCase().replace(/\s+/g, "");
+  if (!normalized) {
+    return false;
+  }
+
+  const mentionsPhase3 = /(?:phase|フェーズ|第)[3３三]|[3３三](?:phase|フェーズ)/.test(normalized);
+  const mentionsOptimization = /最適化|optimization|optimi[sz]e/.test(normalized);
+  const requestsRerun = /戻|再|もう一回|やり直|かけ直|かけて|実行|走らせ|run|rerun|redo|again|back/.test(
+    normalized,
+  );
+  const explicitOptimizationRerun =
+    /再最適化|もう一回.*最適化|最適化.*(やり直|かけ直|かけて|再実行|実行|走らせ)|rerun.*optimization|optimization.*again/.test(
+      normalized,
+    );
+
+  return explicitOptimizationRerun || (mentionsOptimization && requestsRerun && mentionsPhase3);
+}
+
+function wantsSpecImprovement(message = ""): boolean {
+  const normalized = message.toLowerCase().replace(/\s+/g, "");
+  if (!normalized || wantsPhase3Rerun(message)) {
+    return false;
+  }
+
+  return /改善|改良|修正|変更|変え|追加|削除|除外|反映|見直|固定|検証|条件|ロジック|パラメータ|仕様|spec|コード|ea|エントリ|決済/.test(
+    normalized,
+  );
 }
 
 async function appendRuntimeLog(projectDir: string, error: string): Promise<void> {
@@ -87,6 +115,21 @@ export class PipelineOrchestrator {
         phase: project.state.currentPhase,
         content: feedback,
       });
+
+      if (project.state.currentPhase === 4 && wantsPhase3Rerun(feedback)) {
+        project.state.currentPhase = 3;
+        project.state.status = "running";
+        project.state.awaitingApproval = undefined;
+        await this.store.writeProject(project);
+      } else if (project.state.currentPhase === 4 && wantsSpecImprovement(feedback)) {
+        await this.store.createSnapshot(projectId, "before-chat-improve");
+        project.state.iteration += 1;
+        project.state.currentPhase = 0;
+        project.state.status = "running";
+        project.state.awaitingApproval = undefined;
+        await this.store.writeProject(project);
+      }
+
       await this.start(projectId);
     }
   }
@@ -105,8 +148,16 @@ export class PipelineOrchestrator {
     await this.store.writeProject(project);
   }
 
-  async improve(projectId: string): Promise<void> {
+  async improve(projectId: string, feedback?: string): Promise<void> {
+    await this.store.createSnapshot(projectId, "before-improve");
     const project = await this.store.readProject(projectId);
+    if (feedback?.trim()) {
+      await this.store.appendChat(projectId, {
+        role: "user",
+        phase: project.state.currentPhase === 4 ? 4 : 0,
+        content: feedback.trim(),
+      });
+    }
     project.state.iteration += 1;
     project.state.currentPhase = 0;
     project.state.status = "running";
@@ -119,7 +170,21 @@ export class PipelineOrchestrator {
     if (project.state.currentPhase !== 0 && project.state.currentPhase !== 4) {
       return;
     }
+
+    if (project.state.currentPhase === 4) {
+      const messages = await this.store.readChat(projectId);
+      const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+      if (wantsPhase3Rerun(latestUserMessage)) {
+        project.state.currentPhase = 3;
+      } else if (wantsSpecImprovement(latestUserMessage)) {
+        await this.store.createSnapshot(projectId, "before-chat-improve");
+        project.state.iteration += 1;
+        project.state.currentPhase = 0;
+      }
+    }
+
     project.state.status = "running";
+    project.state.awaitingApproval = undefined;
     await this.store.writeProject(project);
     await this.start(projectId);
   }

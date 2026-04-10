@@ -69,6 +69,27 @@ export interface ProjectRecord {
   state: PipelineState;
 }
 
+export interface ProjectSnapshot {
+  id: string;
+  createdAt: string;
+  reason: string;
+  iteration: number;
+  phase: number;
+  status: ProjectStatus;
+  path: string;
+}
+
+export interface ProjectSnapshotView {
+  snapshot: ProjectSnapshot;
+  project: ProjectRecord;
+  spec: string | null;
+  analysisEntries: Array<{
+    fileName: string;
+    contents: string;
+  }>;
+  messages: ChatMessage[];
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";

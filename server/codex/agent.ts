@@ -84,7 +84,7 @@ function buildExecArgs(req: CodexRequest, outputFile: string): string[] {
     args.push("--add-dir", dir);
   }
 
-  args.push(buildPromptEnvelope(req));
+  args.push("-");
   return args;
 }
 
@@ -96,6 +96,7 @@ export async function callCodex(req: CodexRequest): Promise<CodexResult> {
     args: buildExecArgs(req, outputFile),
     cwd: req.workDir,
     timeoutMs: req.timeoutMs,
+    stdinText: buildPromptEnvelope(req),
   });
   let lastMessage = "";
 

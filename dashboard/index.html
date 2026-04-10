@@ -60,12 +60,19 @@
           <div>
             <p class="eyebrow">Browser Command Center</p>
             <h2 id="project-title">プロジェクトを選択してください</h2>
+            <div class="version-picker">
+              <label for="snapshot-select">表示する版</label>
+              <select id="snapshot-select">
+                <option value="">最新版</option>
+              </select>
+              <div id="snapshot-meta" class="project-meta">最新版を表示中</div>
+            </div>
           </div>
           <div class="hero-actions">
             <button id="start-project" type="button">開始</button>
             <button id="approve-project" class="secondary" type="button">承認</button>
             <button id="retry-project" class="secondary" type="button">再実行</button>
-            <button id="improve-project" class="secondary" type="button">改善サイクル</button>
+            <button id="improve-project" class="secondary" type="button">改善条件を選ぶ</button>
           </div>
         </section>
 

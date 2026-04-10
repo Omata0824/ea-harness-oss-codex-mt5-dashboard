@@ -20,6 +20,12 @@ export function renderPipelineMonitor(project) {
       <article class="status-card">
         <strong>現在の状態</strong>
         <div class="project-meta">現在フェーズ: ${PHASE_NAMES[project.state.currentPhase]}</div>
+        <div class="project-meta">改善回数: ${project.state.iteration}</div>
+        ${
+          project.viewingSnapshot
+            ? `<div class="project-meta">表示中: 保存版 ${escapeHtml(project.viewingSnapshot.createdAt)}</div>`
+            : `<div class="project-meta">表示中: 最新版</div>`
+        }
         <div class="status-badge">${currentStatus}</div>
         <p class="status-help">${escapeHtml(helpText)}</p>
       </article>
@@ -59,7 +65,39 @@ export function renderPipelineMonitor(project) {
           </div>
         </article>
       ` : ""}
+
+      ${renderSnapshots(project.snapshots)}
     </div>
+  `;
+}
+
+function renderSnapshots(snapshots) {
+  if (!Array.isArray(snapshots) || snapshots.length === 0) {
+    return `
+      <article class="artifact-card">
+        <h3>保存済みバージョン</h3>
+        <p class="project-meta">まだありません。改善サイクルを押す前に自動保存されます。</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="artifact-card">
+      <h3>保存済みバージョン</h3>
+      <div class="artifact-list">
+        ${snapshots
+          .slice(0, 5)
+          .map(
+            (snapshot) => `
+              <div class="artifact-item">
+                <strong>${escapeHtml(snapshot.createdAt)}</strong><br />
+                理由: ${escapeHtml(snapshot.reason)} / 改善回数: ${escapeHtml(snapshot.iteration)} / 保存先: ${escapeHtml(snapshot.path)}
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -98,7 +136,9 @@ function statusHelp(project) {
     return `処理が停止しました。${project.state.lastError ?? "ログを確認して再実行してください。"}`;
   }
   if (project.state.status === "completed") {
-    return "パイプラインは完了しています。分析タブも確認してください。";
+    return project.viewingSnapshot
+      ? "これは保存済みの過去版です。内容確認用に表示しています。"
+      : "パイプラインは完了しています。分析タブも確認してください。";
   }
   return "プロジェクトの状態はここに表示されます。";
 }

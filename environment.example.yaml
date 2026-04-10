@@ -15,7 +15,6 @@ pipeline:
   mode: "confirm"
   confirm_points:
     - "spec_approved"
-    - "optimization_complete"
     - "analysis_complete"
   compile_max_retry: 5
 

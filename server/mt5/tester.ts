@@ -24,6 +24,7 @@ export async function writeOptimizationSetFile(args: {
   outputPath: string;
   optimizationParams: Array<Record<string, unknown>>;
   currentValues?: Record<string, string>;
+  optimize?: boolean;
 }): Promise<void> {
   const lines = args.optimizationParams.flatMap((item) => {
     const name = String(item.name ?? "");
@@ -34,7 +35,7 @@ export async function writeOptimizationSetFile(args: {
       return [];
     }
     const current = args.currentValues?.[name] ?? start;
-    return [`${name}=${current}||${start}||${step}||${stop}||Y`];
+    return [`${name}=${current}||${start}||${step}||${stop}||${args.optimize === false ? "N" : "Y"}`];
   });
 
   await fs.mkdir(path.dirname(args.outputPath), { recursive: true });
@@ -188,6 +189,7 @@ export function buildIniValues(args: {
 export function buildTesterInputsSection(
   optimizationParams: Array<Record<string, unknown>>,
   currentValues: Record<string, string> = {},
+  options: { optimize?: boolean } = {},
 ): string {
   const lines = optimizationParams.flatMap((item) => {
     const name = String(item.name ?? "").trim();
@@ -200,7 +202,7 @@ export function buildTesterInputsSection(
     }
 
     const current = currentValues[name] ?? start;
-    return [`${name}=${current}||${start}||${step}||${stop}||Y`];
+    return [`${name}=${current}||${start}||${step}||${stop}||${options.optimize === false ? "N" : "Y"}`];
   });
 
   if (lines.length === 0) {

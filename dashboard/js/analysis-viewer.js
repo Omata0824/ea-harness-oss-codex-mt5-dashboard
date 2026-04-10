@@ -1,4 +1,9 @@
-export function renderAnalysis(project, analysisEntries) {
+export function renderAnalysis(
+  project,
+  analysisEntries,
+  improvementDraft = { selected: [], customNote: "" },
+  activeTab = "report",
+) {
   if (!project) {
     return '<p class="project-meta">プロジェクトを選択してください。</p>';
   }
@@ -14,14 +19,80 @@ export function renderAnalysis(project, analysisEntries) {
   const backtest = asObject(byName["backtest-summary.json"]);
   const optimization = asArray(byName["optimization_result.json"]);
   const report = asObject(byName["report.json"]);
+  const analysisStatus = deriveAnalysisStatus(project);
+  const tabs = buildAnalysisTabs({ backtest, optimization, report, analysisEntries, analysisStatus });
+  const normalizedTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : tabs[0]?.id ?? "report";
 
   return `
     <section class="analysis-layout">
-      ${renderBacktestSummary(backtest)}
-      ${renderOptimizationSummary(optimization)}
-      ${renderAnalysisReport(report)}
-      ${renderRawAnalysisFiles(analysisEntries)}
+      ${renderAnalysisTabs(tabs, normalizedTab)}
+      <section class="analysis-tab-panel ${normalizedTab === "backtest" ? "is-active" : ""}" data-analysis-panel="backtest">
+        ${renderSnapshotNotice(project)}
+        ${renderBacktestSummary(backtest)}
+      </section>
+      <section class="analysis-tab-panel ${normalizedTab === "optimization" ? "is-active" : ""}" data-analysis-panel="optimization">
+        ${renderSnapshotNotice(project)}
+        ${renderOptimizationSummary(optimization)}
+      </section>
+      <section class="analysis-tab-panel ${normalizedTab === "report" ? "is-active" : ""}" data-analysis-panel="report">
+        ${renderSnapshotNotice(project)}
+        ${renderAnalysisReport(project, report, improvementDraft, analysisStatus)}
+      </section>
+      <section class="analysis-tab-panel ${normalizedTab === "raw" ? "is-active" : ""}" data-analysis-panel="raw">
+        ${renderSnapshotNotice(project)}
+        ${renderRawAnalysisFiles(analysisEntries)}
+      </section>
     </section>
+  `;
+}
+
+function buildAnalysisTabs({ backtest, optimization, report, analysisEntries, analysisStatus }) {
+  return [
+    { id: "backtest", label: "バックテスト", visible: Boolean(backtest) && Object.keys(backtest).length > 0 },
+    { id: "optimization", label: "最適化", visible: Array.isArray(optimization) && optimization.length > 0 },
+    {
+      id: "report",
+      label: analysisStatus.isFresh ? "AI分析" : "AI分析待ち",
+      visible: (Boolean(report) && Object.keys(report).length > 0) || analysisStatus.showPlaceholder,
+    },
+    { id: "raw", label: "生データ", visible: Array.isArray(analysisEntries) && analysisEntries.length > 0 },
+  ].filter((tab) => tab.visible);
+}
+
+function renderAnalysisTabs(tabs, activeTab) {
+  if (!tabs.length) {
+    return "";
+  }
+
+  return `
+    <div class="analysis-subtabs" role="tablist" aria-label="分析詳細">
+      ${tabs
+        .map(
+          (tab) => `
+            <button
+              class="analysis-subtab ${tab.id === activeTab ? "is-active" : ""}"
+              data-analysis-tab="${tab.id}"
+              type="button"
+            >
+              ${escapeHtml(tab.label)}
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderSnapshotNotice(project) {
+  if (!project.viewingSnapshot) {
+    return "";
+  }
+
+  return `
+    <article class="analysis-card">
+      <h3>表示中の版</h3>
+      <p class="project-meta">この画面は保存済みバージョン ${escapeHtml(project.viewingSnapshot.createdAt)} を表示しています。</p>
+    </article>
   `;
 }
 
@@ -153,12 +224,41 @@ function renderParameterList(row, parameterColumns) {
   return `<div class="parameter-list">${items.join("")}</div>`;
 }
 
-function renderAnalysisReport(report) {
-  if (!report || Object.keys(report).length === 0) {
-    return "";
+function renderAnalysisReport(project, report, improvementDraft, analysisStatus) {
+  if (!analysisStatus.isFresh) {
+    return `
+      <article class="analysis-card analysis-report-card">
+        <div class="analysis-head">
+          <h3>AI 分析</h3>
+          <span class="status-badge">${escapeHtml(analysisStatus.badge)}</span>
+        </div>
+        <section class="report-section report-hero">
+          <div class="report-section-label">状態</div>
+          <p class="report-lead">${escapeHtml(analysisStatus.message)}</p>
+        </section>
+      </article>
+    `;
   }
 
+  if (!report || Object.keys(report).length === 0) {
+    return `
+      <article class="analysis-card analysis-report-card">
+        <div class="analysis-head">
+          <h3>AI 分析</h3>
+          <span class="status-badge">未生成</span>
+        </div>
+        <section class="report-section report-hero">
+          <div class="report-section-label">状態</div>
+          <p class="report-lead">AI 分析結果はまだありません。最適化完了後に生成されます。</p>
+        </section>
+      </article>
+    `;
+  }
+
+  const normalized = normalizeAnalysisReport(report);
+
   const conclusion =
+    normalized.conclusion ||
     pickValue(report, [
       "summary.overall_assessment",
       "overall_assessment.conclusion",
@@ -166,12 +266,13 @@ function renderAnalysisReport(report) {
       "conclusion",
     ]) || "分析レポートを取得しました。";
 
-  const meta = asObject(report.meta);
-  const overall = asObject(report.overall_assessment);
-  const trend = asObject(report.common_parameter_trends) || asObject(report.analysis?.common_parameter_trends);
-  const risk = asObject(report.overfitting_risk) || asObject(report.analysis?.overfitting_risk);
-  const reliability = asObject(report.statistical_reliability) || asObject(report.analysis?.statistical_reliability);
+  const meta = normalized.meta;
+  const overall = normalized.overall;
+  const trend = normalized.trend;
+  const risk = normalized.risk;
+  const reliability = normalized.reliability;
   const proposals = [
+    ...normalized.proposals,
     ...asArray(report.next_improvement_proposals),
     ...asArray(report.analysis?.improvement_proposals),
   ];
@@ -183,6 +284,9 @@ function renderAnalysisReport(report) {
     ["期間", meta?.backtest_period_reference],
     ["過剰最適化リスク", risk?.risk_level],
     ["信頼性評価", reliability?.assessment],
+    ["対象EA", meta?.ea_name],
+    ["対象通貨", meta?.symbol],
+    ["探索候補数", meta?.search_space_size],
   ].filter(([, value]) => value !== undefined && value !== null && value !== "");
 
   const observations = uniqueList([
@@ -355,10 +459,16 @@ function renderAnalysisReport(report) {
               <div class="report-grid">
                 ${proposals
                   .slice(0, 6)
-                  .map((item) => {
+                  .map((item, index) => {
                     const proposal = asObject(item) || {};
+                    const proposalId = `proposal-${index}`;
+                    const selected = Array.isArray(improvementDraft.selected) && improvementDraft.selected.includes(proposalId);
                     return `
-                      <div class="report-action-card">
+                      <label class="report-action-card report-action-selectable ${selected ? "is-selected" : ""}">
+                        <div class="proposal-check">
+                          <input type="checkbox" data-improvement-index="${proposalId}" ${selected ? "checked" : ""} />
+                          <span>この改善案を使う</span>
+                        </div>
                         <div class="report-action-head">
                           <h4>${escapeHtml(proposal.title ?? "改善案")}</h4>
                           ${proposal.priority ? `<span class="status-badge">${escapeHtml(proposal.priority)}</span>` : ""}
@@ -366,7 +476,7 @@ function renderAnalysisReport(report) {
                         ${proposal.action ? `<p>${escapeHtml(proposal.action)}</p>` : ""}
                         ${proposal.logic_change ? `<p>${escapeHtml(proposal.logic_change)}</p>` : ""}
                         ${proposal.reason || proposal.why ? `<p class="project-meta">${escapeHtml(proposal.reason ?? proposal.why)}</p>` : ""}
-                      </div>
+                      </label>
                     `;
                   })
                   .join("")}
@@ -375,7 +485,275 @@ function renderAnalysisReport(report) {
           `
           : ""
       }
+
+      ${renderImprovementComposer(project, proposals, improvementDraft)}
     </article>
+  `;
+}
+
+function deriveAnalysisStatus(project) {
+  const successfulPhase3 = latestSuccessfulPhase(project, 3);
+  const successfulPhase4 = latestSuccessfulPhase(project, 4);
+  const isFresh =
+    !successfulPhase3 ||
+    (successfulPhase4 && String(successfulPhase4.completedAt) >= String(successfulPhase3.completedAt));
+
+  if (project.state.currentPhase === 4 && project.state.status === "running") {
+    return {
+      isFresh: false,
+      showPlaceholder: true,
+      badge: "生成中",
+      message: "AI 分析を実行中です。完了するとここに今回の分析結果が表示されます。",
+    };
+  }
+
+  if (
+    project.state.currentPhase === 3 &&
+    project.state.status === "waiting_approval" &&
+    project.state.awaitingApproval === "optimization_complete"
+  ) {
+    return {
+      isFresh: false,
+      showPlaceholder: true,
+      badge: "開始待ち",
+      message: "今回の最適化結果に対する AI 分析はまだ実行していません。承認すると AI 分析を開始します。",
+    };
+  }
+
+  if (!isFresh) {
+    return {
+      isFresh: false,
+      showPlaceholder: true,
+      badge: "更新待ち",
+      message: "前回の AI 分析は古いため非表示にしています。今回の分析が完了すると新しい結果に切り替わります。",
+    };
+  }
+
+  return {
+    isFresh: true,
+    showPlaceholder: Boolean(successfulPhase4),
+    badge: "結果あり",
+    message: "",
+  };
+}
+
+function normalizeAnalysisReport(report) {
+  const meta = asObject(report.meta);
+  const trend =
+    asObject(report.common_parameter_trends) ||
+    asObject(report.analysis?.common_parameter_trends) ||
+    findObjectByNestedKeys(report, ["最良設定", "パラメータ別集計"]);
+  const risk =
+    asObject(report.overfitting_risk) ||
+    asObject(report.analysis?.overfitting_risk) ||
+    findObjectByNestedKeys(report, ["評価", "根拠"]);
+  const reliability =
+    asObject(report.statistical_reliability) ||
+    asObject(report.analysis?.statistical_reliability) ||
+    findObjectByNestedKeys(report, ["評価", "判断理由"]);
+  const bestConfigSource = asObject(trend?.best_configuration) || asObject(trend?.["最良設定"]);
+  const parameterSummaries = asObject(trend?.["パラメータ別集計"]);
+  const japaneseProposals = findProposalArray(report);
+  const parameterEntries = bestConfigSource
+    ? Object.entries(bestConfigSource).filter(([key]) =>
+        !["Profit", "Profit Factor", "Recovery Factor", "Sharpe Ratio", "Equity DD %", "Trades"].includes(key),
+      )
+    : [];
+
+  return {
+    conclusion: pickFirst(report, ["結論", "meta.総評"]),
+    meta: {
+      analysis_date: meta?.analysis_date,
+      analyzed_runs: meta?.analyzed_runs ?? meta?.analyzed_cases,
+      top_runs_used_for_pattern_review: meta?.top_runs_used_for_pattern_review,
+      backtest_period_reference: meta?.backtest_period_reference,
+      ea_name: meta?.["対象EA"],
+      symbol: meta?.["対象通貨"],
+      search_space_size: meta?.["探索候補数"],
+    },
+    overall: {
+      important_observations: asArray(findValueByKey(report, "初期仕様との比較")),
+      critical_findings: asArray(findValueByKey(report, "共通傾向")),
+    },
+    trend: {
+      best_configuration: bestConfigSource
+        ? {
+            profit: bestConfigSource.Profit,
+            profit_factor: bestConfigSource["Profit Factor"],
+            equity_dd_pct: bestConfigSource["Equity DD %"],
+            trades: bestConfigSource.Trades,
+            params: Object.fromEntries(parameterEntries),
+          }
+        : null,
+      details: parameterSummaries
+        ? Object.entries(parameterSummaries).map(([parameter, rows]) => ({
+            parameter,
+            interpretation: summarizeParameterRows(rows),
+          }))
+        : [],
+    },
+    risk: {
+      risk_level: risk?.risk_level ?? risk?.["評価"],
+      details: asArray(risk?.details),
+      reasons: uniqueList([...asArray(risk?.reasons), ...asArray(risk?.["根拠"])]),
+      specific_examples: uniqueList(
+        [...asArray(risk?.specific_examples), ...asArray(risk?.["解釈"] ? [risk["解釈"]] : [])],
+      ),
+    },
+    reliability: {
+      assessment: reliability?.assessment ?? reliability?.["評価"],
+      details: uniqueList([...asArray(reliability?.details), ...asArray(reliability?.["判断理由"])]),
+      practical_reading: reliability?.practical_reading,
+      trust_conclusion: asArray(reliability?.["制約"]).join(" "),
+    },
+    proposals: japaneseProposals.map((proposal) => ({
+      title: proposal["施策"],
+      action: proposal["施策"],
+      reason: proposal["理由"],
+      priority: proposal["優先度"],
+    })),
+  };
+}
+
+function summarizeParameterRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return "";
+  }
+
+  return rows
+    .slice(0, 3)
+    .map((row) => {
+      const item = asObject(row) || {};
+      return Object.entries(item)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(", ");
+    })
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function findValueByKey(source, key) {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  if (key in source) {
+    return source[key];
+  }
+
+  for (const value of Object.values(source)) {
+    if (value && typeof value === "object" && !Array.isArray(value) && key in value) {
+      return value[key];
+    }
+  }
+
+  return undefined;
+}
+
+function findObjectByNestedKeys(source, keys) {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  for (const value of Object.values(source)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      continue;
+    }
+
+    if (keys.every((key) => key in value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function findProposalArray(source) {
+  if (!source || typeof source !== "object") {
+    return [];
+  }
+
+  for (const value of Object.values(source)) {
+    if (!Array.isArray(value) || value.length === 0) {
+      continue;
+    }
+
+    const first = asObject(value[0]);
+    if (first && ("施策" in first || "理由" in first || "優先度" in first)) {
+      return value.map((item) => asObject(item) || {}).filter((item) => Object.keys(item).length > 0);
+    }
+  }
+
+  return [];
+}
+
+function pickFirst(source, paths) {
+  for (const pathText of paths) {
+    const value = readPath(source, pathText);
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return "";
+}
+
+function latestSuccessfulPhase(project, phase) {
+  return [...(project?.state?.phaseHistory ?? [])]
+    .reverse()
+    .find((entry) => entry.phase === phase && entry.success);
+}
+
+function renderImprovementComposer(project, proposals, improvementDraft) {
+  if (project.viewingSnapshot) {
+    return `
+      <section class="report-section">
+        <div class="report-section-label">再作成</div>
+        <p class="project-meta">保存済みバージョン表示中は再作成できません。最新版に戻してください。</p>
+      </section>
+    `;
+  }
+
+  const selectedCount = Array.isArray(improvementDraft.selected) ? improvementDraft.selected.length : 0;
+  const proposalsCount = Array.isArray(proposals) ? proposals.length : 0;
+  const isRecoveryMode = project.state.status === "error" && project.state.currentPhase === 0;
+
+  return `
+    <section class="report-section improvement-composer" id="improvement-composer">
+      <div class="report-section-label">改善条件を選んで仕様書を作り直す</div>
+      <p class="project-meta">
+        分析で出た改善案を選び、必要なら追記してから再実験します。
+        保存版を作成したあと、仕様書の作り直しから始めます。
+      </p>
+      ${
+        isRecoveryMode
+          ? `
+            <p class="project-meta">
+              いまは再生成途中で止まっていますが、前回の分析結果は残っています。この内容から改善条件を選んで再開できます。
+            </p>
+          `
+          : ""
+      }
+      <div class="report-info-grid">
+        <div class="report-info-card">
+          <div class="metric-label">選択した改善案</div>
+          <div class="metric-value">${escapeHtml(String(selectedCount))}</div>
+        </div>
+        <div class="report-info-card">
+          <div class="metric-label">候補数</div>
+          <div class="metric-value">${escapeHtml(String(proposalsCount))}</div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="improvement-custom-note">自分で追加したい指示</label>
+        <textarea id="improvement-custom-note" rows="6" placeholder="例: H1 の EMA 傾きで強トレンド中は逆張りしないでください。">${escapeHtml(
+          improvementDraft.customNote ?? "",
+        )}</textarea>
+        <p class="field-note">空でも進められます。選んだ改善案に補足したい内容だけ書いてください。</p>
+      </div>
+      <div class="inline-actions">
+        <button id="apply-improvement-plan" type="button">この内容で仕様書を作り直す</button>
+      </div>
+    </section>
   `;
 }
 

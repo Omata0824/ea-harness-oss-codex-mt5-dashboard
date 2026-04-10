@@ -33,6 +33,24 @@ async function readDirIfExists(dirPath: string): Promise<string[]> {
   }
 }
 
+async function readAnalysisEntries(dirPath: string): Promise<Array<{ fileName: string; contents: string }>> {
+  const entries = await readDirIfExists(dirPath);
+  return Promise.all(
+    entries.map(async (fileName) => ({
+      fileName,
+      contents: await fs.readFile(path.join(dirPath, fileName), "utf8"),
+    })),
+  );
+}
+
+function userFacingCodexError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  if (text.toLowerCase().includes("enoent") && text.toLowerCase().includes("codex")) {
+    return "Codex コマンドが見つかりません。Setup Wizard の Codex command を確認してください。";
+  }
+  return text;
+}
+
 export function createApiRouter(args: {
   store: StateStore;
   orchestrator: PipelineOrchestrator;
@@ -71,7 +89,16 @@ export function createApiRouter(args: {
         ...project,
         analysis: await readJsonIfExists(analysisPath),
         spec: await readTextIfExists(specPath),
+        snapshots: await args.store.listSnapshots(req.params.id),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/projects/:id/snapshots/:snapshotId", async (req, res, next) => {
+    try {
+      res.json(await args.store.readSnapshot(req.params.id, req.params.snapshotId));
     } catch (error) {
       next(error);
     }
@@ -133,7 +160,7 @@ export function createApiRouter(args: {
 
   router.post("/projects/:id/improve", async (req, res, next) => {
     try {
-      await args.orchestrator.improve(req.params.id);
+      await args.orchestrator.improve(req.params.id, req.body?.feedback);
       res.json({ ok: true });
     } catch (error) {
       next(error);
@@ -175,14 +202,7 @@ export function createApiRouter(args: {
   router.get("/projects/:id/analysis", async (req, res, next) => {
     try {
       const analysisDir = path.join(args.store.projectDir(req.params.id), "analysis");
-      const entries = await readDirIfExists(analysisDir);
-      const payload = await Promise.all(
-        entries.map(async (fileName) => ({
-          fileName,
-          contents: await fs.readFile(path.join(analysisDir, fileName), "utf8"),
-        })),
-      );
-      res.json(payload);
+      res.json(await readAnalysisEntries(analysisDir));
     } catch (error) {
       next(error);
     }
@@ -224,11 +244,17 @@ export function createApiRouter(args: {
       });
       res.json({
         ok: result.exitCode === 0,
+        message: result.exitCode === 0 ? "Codex 接続は問題ありません。" : "Codex 接続に失敗しました。",
         stdout: result.stdout,
         stderr: result.stderr,
       });
     } catch (error) {
-      next(error);
+      res.json({
+        ok: false,
+        message: userFacingCodexError(error),
+        stdout: "",
+        stderr: "",
+      });
     }
   });
 
