@@ -87,13 +87,8 @@ document.querySelector("#chat-form").addEventListener("submit", async (event) =>
   if (!message) {
     return;
   }
-  await api(`/api/projects/${state.selectedProjectId}/chat`, {
-    method: "POST",
-    body: JSON.stringify({ message }),
-  });
-  state.logs.push(`[chat:send] ${message}`);
   input.value = "";
-  await refreshSelectedProject();
+  await sendProjectChat(message);
 });
 
 document.querySelectorAll(".tab").forEach((button) => {
@@ -169,6 +164,7 @@ function render() {
   renderSnapshotPicker();
   setActionButtonsState();
   els.pipelineMonitor.innerHTML = renderPipelineMonitor(state.selectedProject);
+  bindPipelineActions();
   els.chatMessages.innerHTML = renderChatMessages(state.messages);
   els.analysisViewer.innerHTML = renderAnalysis(
     state.selectedProject,
@@ -178,6 +174,14 @@ function render() {
   );
   bindAnalysisActions();
   els.eventLog.textContent = state.logs.slice(-40).join("\n");
+}
+
+function bindPipelineActions() {
+  els.pipelineMonitor.querySelectorAll("[data-recovery-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void sendProjectChat(button.dataset.recoveryMessage);
+    });
+  });
 }
 
 function renderProjectList() {
@@ -347,6 +351,19 @@ async function actOnProject(action) {
     method: "POST",
     body: JSON.stringify({}),
   });
+  await refreshSelectedProject();
+}
+
+async function sendProjectChat(message) {
+  if (!state.selectedProjectId || !message) {
+    return;
+  }
+
+  await api(`/api/projects/${state.selectedProjectId}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+  state.logs.push(`[chat:send] ${message}`);
   await refreshSelectedProject();
 }
 

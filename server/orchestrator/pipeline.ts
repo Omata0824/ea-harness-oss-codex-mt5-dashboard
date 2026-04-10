@@ -51,6 +51,52 @@ function wantsSpecImprovement(message = ""): boolean {
   );
 }
 
+function requestedRecoveryPhase(message = ""): 0 | 1 | 2 | 3 | 4 | undefined {
+  const normalized = message.toLowerCase().replace(/\s+/g, "");
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (wantsPhase3Rerun(message)) {
+    return 3;
+  }
+  if (/(?:phase|フェーズ|第)[0０零]|仕様|spec/.test(normalized)) {
+    return 0;
+  }
+  if (/(?:phase|フェーズ|第)[1１一]|コンパイル|compile|生成|コード|source|mq5|ea再生成/.test(normalized)) {
+    return 1;
+  }
+  if (/(?:phase|フェーズ|第)[2２二]|バックテスト|backtest/.test(normalized)) {
+    return 2;
+  }
+  if (/(?:phase|フェーズ|第)[4４四]|分析|レポート|analysis|report/.test(normalized)) {
+    return 4;
+  }
+
+  return undefined;
+}
+
+function wantsSimpleRetry(message = ""): boolean {
+  const normalized = message.toLowerCase().replace(/\s+/g, "");
+  return /再実行|やり直|もう一回|リトライ|retry|rerun|redo|復帰|復旧|続き/.test(normalized);
+}
+
+function buildErrorHelpMessage(project: ProjectRecord): string {
+  const error = project.state.lastError?.trim() || "詳細エラーは記録されていません。";
+  return [
+    `現在 Phase ${project.state.currentPhase} で停止しています。`,
+    "",
+    "エラー概要:",
+    error.split(/\r?\n/).slice(-12).join("\n"),
+    "",
+    "このチャットで実行できます:",
+    "- 「このフェーズを再実行」",
+    "- 「Phase1からEAを再生成」",
+    "- 「Phase3で通常最適化」",
+    "- 「Phase0から仕様を見直す」",
+  ].join("\n");
+}
+
 async function appendRuntimeLog(projectDir: string, error: string): Promise<void> {
   const logPath = path.join(projectDir, "build", "runtime-error.log");
   await fs.mkdir(path.dirname(logPath), { recursive: true });
@@ -154,7 +200,7 @@ export class PipelineOrchestrator {
     if (feedback?.trim()) {
       await this.store.appendChat(projectId, {
         role: "user",
-        phase: project.state.currentPhase === 4 ? 4 : 0,
+        phase: project.state.currentPhase,
         content: feedback.trim(),
       });
     }
@@ -167,13 +213,47 @@ export class PipelineOrchestrator {
 
   async onChat(projectId: string): Promise<void> {
     const project = await this.store.readProject(projectId);
+    const messages = await this.store.readChat(projectId);
+    const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+
+    if (project.state.status === "error") {
+      const recoveryPhase = requestedRecoveryPhase(latestUserMessage);
+      if (recoveryPhase !== undefined) {
+        if (recoveryPhase === 0) {
+          await this.store.createSnapshot(projectId, "before-error-recovery");
+          project.state.iteration += 1;
+        }
+        project.state.currentPhase = recoveryPhase;
+        project.state.status = "running";
+        project.state.awaitingApproval = undefined;
+        project.state.lastError = undefined;
+        await this.store.writeProject(project);
+        await this.start(projectId);
+        return;
+      }
+
+      if (wantsSimpleRetry(latestUserMessage)) {
+        project.state.status = "running";
+        project.state.awaitingApproval = undefined;
+        project.state.lastError = undefined;
+        await this.store.writeProject(project);
+        await this.start(projectId);
+        return;
+      }
+
+      await this.store.appendChat(projectId, {
+        role: "assistant",
+        phase: project.state.currentPhase,
+        content: buildErrorHelpMessage(project),
+      });
+      return;
+    }
+
     if (project.state.currentPhase !== 0 && project.state.currentPhase !== 4) {
       return;
     }
 
     if (project.state.currentPhase === 4) {
-      const messages = await this.store.readChat(projectId);
-      const latestUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
       if (wantsPhase3Rerun(latestUserMessage)) {
         project.state.currentPhase = 3;
       } else if (wantsSpecImprovement(latestUserMessage)) {

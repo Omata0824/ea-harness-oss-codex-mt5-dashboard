@@ -172,7 +172,7 @@ export function createApiRouter(args: {
       const project = await args.store.readProject(req.params.id);
       const message = await args.store.appendChat(req.params.id, {
         role: "user",
-        phase: project.state.currentPhase === 4 ? 4 : 0,
+        phase: project.state.currentPhase,
         content: String(req.body?.message ?? ""),
       });
       await args.orchestrator.onChat(req.params.id);

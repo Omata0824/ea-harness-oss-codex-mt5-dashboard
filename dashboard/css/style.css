@@ -266,7 +266,8 @@ pre {
 .phase-card,
 .status-card,
 .spec-card,
-.artifact-card {
+.artifact-card,
+.recovery-card {
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -299,6 +300,32 @@ pre {
   margin: 0.75rem 0 0;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.recovery-card {
+  display: grid;
+  gap: 0.75rem;
+  border-color: rgba(177, 79, 43, 0.35);
+  background: rgba(255, 248, 244, 0.86);
+}
+
+.recovery-card h3 {
+  margin: 0;
+}
+
+.recovery-card pre {
+  max-height: 220px;
+  overflow: auto;
+  padding: 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+}
+
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .spec-card pre,

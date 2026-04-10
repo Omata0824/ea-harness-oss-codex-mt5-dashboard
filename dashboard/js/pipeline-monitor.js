@@ -30,6 +30,8 @@ export function renderPipelineMonitor(project) {
         <p class="status-help">${escapeHtml(helpText)}</p>
       </article>
 
+      ${renderRecoveryCard(project)}
+
       <div class="phase-grid">
         ${PHASE_NAMES.map((label, index) => {
           const history = project.state.phaseHistory.filter((item) => item.phase === index);
@@ -68,6 +70,40 @@ export function renderPipelineMonitor(project) {
 
       ${renderSnapshots(project.snapshots)}
     </div>
+  `;
+}
+
+function renderRecoveryCard(project) {
+  if (project.state.status !== "error") {
+    return "";
+  }
+
+  const lastError = project.state.lastError || "詳細エラーは記録されていません。";
+  const actions = [
+    ["このフェーズを再実行", "このフェーズを再実行してください"],
+    ["EAを再生成", "Phase1からEAを再生成してください"],
+    ["通常最適化", "Phase3で通常最適化を実行してください"],
+    ["仕様を見直す", "Phase0から仕様を見直してください"],
+  ];
+
+  return `
+    <article class="recovery-card">
+      <div class="recovery-head">
+        <div>
+          <h3>復旧アシスト</h3>
+          <p class="project-meta">Codexを開かずに、この画面から復旧指示を送れます。</p>
+        </div>
+      </div>
+      <pre>${escapeHtml(lastError.split(/\r?\n/).slice(-18).join("\n"))}</pre>
+      <div class="recovery-actions">
+        ${actions
+          .map(
+            ([label, message]) =>
+              `<button class="secondary" type="button" data-recovery-message="${escapeHtml(message)}">${escapeHtml(label)}</button>`,
+          )
+          .join("")}
+      </div>
+    </article>
   `;
 }
 

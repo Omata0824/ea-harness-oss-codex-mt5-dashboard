@@ -93,7 +93,7 @@ export interface ProjectSnapshotView {
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
-  phase: 0 | 4;
+  phase: 0 | 1 | 2 | 3 | 4;
   content: string;
   createdAt: string;
 }
