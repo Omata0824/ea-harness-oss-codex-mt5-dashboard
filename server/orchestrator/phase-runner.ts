@@ -208,7 +208,25 @@ function toFiniteNumber(value: unknown): number | null {
 
 function readFixedValidationValues(spec: Record<string, unknown>): Record<string, number> {
   const rawParams = spec.optimization_params;
-  if (!rawParams || typeof rawParams !== "object" || Array.isArray(rawParams)) {
+  if (Array.isArray(rawParams)) {
+    const fixedValues: Record<string, number> = {};
+    for (const item of rawParams) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        continue;
+      }
+
+      const record = item as Record<string, unknown>;
+      const name = String(record.name ?? "").trim();
+      const parsed = toFiniteNumber(record.value);
+      if (name && parsed !== null) {
+        fixedValues[name] = parsed;
+      }
+    }
+
+    return fixedValues;
+  }
+
+  if (!rawParams || typeof rawParams !== "object") {
     return {};
   }
 
@@ -237,6 +255,23 @@ function readFixedValidationValues(spec: Record<string, unknown>): Record<string
   }
 
   return fixedValues;
+}
+
+function hasFixedValidationIntent(spec: Record<string, unknown>, rawParams: Array<Record<string, unknown>>): boolean {
+  if (rawParams.some((item) => item.fixed === true || item.value !== undefined || item.values !== undefined)) {
+    return true;
+  }
+
+  const modeText = [
+    spec.validation_plan,
+    spec.research_context,
+    spec.entry_logic,
+    spec.optimization_params,
+  ]
+    .map((value) => JSON.stringify(value ?? ""))
+    .join("\n");
+
+  return /固定候補|固定値|再最適化しない|固定して|別通貨検証|fixed/i.test(modeText);
 }
 
 function wantsFixedValidation(message = ""): boolean {
@@ -275,8 +310,11 @@ function buildOptimizationPlan(
   const fixedValues = readFixedValidationValues(spec);
   const hasCompleteFixedValidation =
     normalized.length > 0 && normalized.every((item) => fixedValues[item.name] !== undefined);
+  const shouldUseFixedValidation =
+    options.fixedValidation === true ||
+    (normalized.length === 0 && hasFixedValidationIntent(spec, rawParams));
 
-  if (options.fixedValidation === true && hasCompleteFixedValidation) {
+  if (shouldUseFixedValidation && (hasCompleteFixedValidation || normalized.length === 0)) {
     return {
       params: normalized.map((item) => {
         const fixedValue = fixedValues[item.name];
